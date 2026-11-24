@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#090e1b">
+<title>ETH EDGE COMMANDER V2</title>
+<style>
+*{box-sizing:border-box}
+body{
+margin:0;background:#090e1b;color:#edf2ff;
+font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+}
+main{max-width:900px;margin:auto;padding:18px}
+h1{font-size:24px;margin:10px 0}
+h2{font-size:17px;margin:0 0 16px}
+small,.muted{color:#94a3b8}
+.card{
+background:linear-gradient(135deg,#172238,#101827);
+border:1px solid #293952;
+border-radius:18px;padding:18px;margin:14px 0;
+}
+.grid{
+display:grid;grid-template-columns:1fr 1fr;gap:16px
+}
+.metric{font-size:27px;font-weight:800;margin-top:6px}
+.green{color:#34d399}
+.red{color:#fb7185}
+.amber{color:#fbbf24}
+.row{
+display:flex;justify-content:space-between;
+gap:12px;padding:10px 0;
+border-bottom:1px solid #ffffff0d
+}
+.row span:last-child{text-align:right}
+.badge{
+display:inline-block;padding:7px 12px;
+border-radius:20px;background:#1e293b;
+font-size:12px;font-weight:bold
+}
+button{
+width:100%;padding:14px;border:0;
+border-radius:12px;background:#315caa;
+color:white;font-size:15px;font-weight:bold
+}
+pre{
+white-space:pre-wrap;overflow-wrap:anywhere;
+font-size:12px;color:#b6c5dd
+}
+#verdict{font-size:38px;font-weight:900}
+</style>
+</head>
+<body>
+<main>
+
+<small>MODULE X / CLOUD ENGINE</small>
+<h1>ETH EDGE COMMANDER V2</h1>
+<span class="badge" id="connection">CONNECTING</span>
+<p class="muted">Autonomous paper trading · Manual prop execution</p>
+
+<section class="card">
+<h2>Market intelligence</h2>
+<small>ETH/USD</small>
+<div class="metric" id="price">—</div>
+<div class="row"><span>Market source</span><span id="source">—</span></div>
+<div class="row"><span>Trend</span><span id="trend">—</span></div>
+<div class="row"><span>Structure</span><span id="structure">—</span></div>
+<div class="row"><span>Completed scans</span><span id="scans">—</span></div>
+</section>
+
+<section class="card">
+<h2>Commander verdict</h2>
+<div id="verdict" class="amber">WAIT</div>
+<p id="reason" class="muted">Connecting to engine...</p>
+</section>
+
+<section class="card">
+<h2>Cloud paper account</h2>
+<div class="grid">
+<div><small>Account equity</small><div class="metric" id="equity">—</div></div>
+<div><small>Balance</small><div class="metric" id="balance">—</div></div>
+<div><small>Realized P&L</small><div class="metric" id="realized">—</div></div>
+<div><small>Open P&L</small><div class="metric" id="unrealized">—</div></div>
+</div>
+</section>
+
+<section class="card">
+<h2>Performance analytics</h2>
+<div class="row"><span>Closed trades</span><span id="closed">—</span></div>
+<div class="row"><span>Winning trades</span><span id="wins">—</span></div>
+<div class="row"><span>Losing trades</span><span id="losses">—</span></div>
+<div class="row"><span>Win rate</span><span id="winrate">—</span></div>
+<div class="row"><span>Profit factor</span><span id="pf">—</span></div>
+<div class="row"><span>Expectancy</span><span id="expectancy">—</span></div>
+<div class="row"><span>Average R</span><span id="avgr">—</span></div>
+<div class="row"><span>Maximum drawdown (raw)</span><span id="drawdown">—</span></div>
+</section>
+
+<section class="card">
+<h2>Module X risk governor</h2>
+<div class="row"><span>Overall floor</span><span id="floor">—</span></div>
+<div class="row"><span>Daily threshold</span><span id="daily">—</span></div>
+<div class="row"><span>Drawdown buffer</span><span id="buffer">—</span></div>
+<div class="row"><span>Trading lock</span><span id="locked">—</span></div>
+<div class="row"><span>Real execution</span><span id="real">—</span></div>
+<p class="muted" id="lockreason"></p>
+</section>
+
+<section class="card">
+<h2>Active setup</h2>
+<pre id="setup">No qualifying setup</pre>
+</section>
+
+<section class="card">
+<h2>Open paper position</h2>
+<pre id="position">No open position</pre>
+</section>
+
+<section class="card">
+<h2>Trade history</h2>
+<div id="history">No completed trades</div>
+</section>
+
+<button onclick="refresh()">Refresh cloud data</button>
+<p class="muted" id="updated">Waiting for server...</p>
+<p class="muted" id="error"></p>
+<p class="muted">Paper trading only. Market data may differ from Kraken Prop perpetual futures. Free hosting may sleep or lose stored data.</p>
+
+</main>
+
+<script>
+const API="https://eth-edge-commander.onrender.com/status";
+const el=id=>document.getElementById(id);
+const set=(id,value)=>el(id).textContent=value??"—";
+const money=v=>v==null||!Number.isFinite(Number(v))
+?"—":Number(v).toLocaleString("en-US",{
+style:"currency",currency:"USD"
+});
+
+let busy=false;
+
+function pnl(id,value){
+set(id,money(value));
+el(id).className="metric "+(
+value==null?"":Number(value)<0?"red":"green"
+);
+}
+
+async function refresh(){
+if(busy)return;
+busy=true;
+const controller=new AbortController();
+const timer=setTimeout(()=>controller.abort(),70000);
+
+try{
+const response=await fetch(API,{
+cache:"no-store",
+signal:controller.signal
+});
+if(!response.ok)throw new Error("HTTP "+response.status);
+
+const d=await response.json();
+const a=d.account||{};
+const s=d.analysis||{};
+const stamp=Date.parse(d.updated);
+const fresh=Number.isFinite(stamp)&&
+Date.now()-stamp<30000;
+const online=d.status==="ONLINE"&&!d.error&&fresh;
+
+set("connection",online?"● ONLINE":"● CHECK ENGINE");
+el("connection").className="badge "+(online?"green":"amber");
+
+set("price",money(d.price));
+set("source",d.market_source);
+set("trend",s.trend);
+set("structure",s.structure);
+set("scans",d.scans);
+
+set("verdict",online?(d.verdict||"WAIT"):"STALE");
+el("verdict").className=
+online&&d.verdict==="LONG"?"green":
+online&&d.verdict==="SHORT"?"red":"amber";
+
+set("reason",d.reason||s.reason);
+set("equity",money(a.equity??d.equity));
+set("balance",money(a.balance));
+pnl("realized",a.realized_pnl);
+pnl("unrealized",a.unrealized_pnl);
+
+set("closed",a.closed_trades);
+set("wins",a.winning_trades);
+set("losses",a.losing_trades);
+set("winrate",a.win_rate==null?"—":String(a.win_rate)+" (raw)");
+set("pf",a.profit_factor);
+set("expectancy",a.expectancy);
+set("avgr",a.average_r);
+set("drawdown",a.max_drawdown);
+
+set("floor",money(d.overall_floor));
+set("daily",money(d.daily_threshold));
+
+const values=[a.equity??d.equity,d.overall_floor,d.daily_threshold];
+set("buffer",values.every(v=>v!=null&&Number.isFinite(Number(v)))
+?money(Number(values[0])-Math.max(Number(values[1]),Number(values[2])))
+:"—");
+
+set("locked",a.trading_locked===true?"LOCKED":
+a.trading_locked===false?"UNLOCKED":"UNKNOWN");
+
+set("real",d.real_execution===false?"DISABLED":
+d.real_execution===true?"ENABLED — CHECK":"UNKNOWN");
+
+set("lockreason",a.lock_reason||"");
+
+set("setup",s.setup?JSON.stringify(s.setup,null,2):
+"No qualifying setup");
+
+set("position",a.open_position?
+JSON.stringify(a.open_position,null,2):
+"No open position");
+
+const history=el("history");
+history.replaceChildren();
+
+if(Array.isArray(d.history)&&d.history.length){
+d.history.slice().reverse().slice(0,30).forEach(trade=>{
+const p=document.createElement("pre");
+p.textContent=JSON.stringify(trade,null,2);
+history.appendChild(p);
+});
+}else{
+history.textContent="No completed trades";
+}
+
+set("updated",Number.isFinite(stamp)?
+"Engine updated: "+new Date(stamp).toLocaleString():
+"Engine timestamp unavailable");
+
+set("error",d.error||(!fresh?"Warning: market data may be stale.":""));
+
+}catch(e){
+set("connection","● DISCONNECTED");
+el("connection").className="badge red";
+set("verdict","OFFLINE");
+el("verdict").className="red";
+set("reason","Displayed account data may be outdated.");
+set("error","Connection error: "+e.message);
+}finally{
+clearTimeout(timer);
+busy=false;
+}
+}
+
+refresh();
+setInterval(refresh,5000);
+</script>
+</body>
+</html>
