@@ -1,75 +1,109 @@
 import os
 import json
+import time
 import urllib.request
+import urllib.error
 from datetime import datetime, timezone
 
-BOT_TOKEN = os.environ.get(
-    "TELEGRAM_BOT_TOKEN", ""
-)
+BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
-CHAT_ID = os.environ.get(
-    "TELEGRAM_CHAT_ID", ""
-)
+VERSION = "ETH EDGE COMMANDER V2.1"
 
 
-def send_alert(message):
+def telegram_request(method, payload, timeout=15):
     if not BOT_TOKEN or not CHAT_ID:
-        print(
-            "Telegram not configured",
-            flush=True
-        )
-        return False
+        return None
 
     url = (
         "https://api.telegram.org/bot"
         + BOT_TOKEN
-        + "/sendMessage"
+        + "/"
+        + method
     )
-
-    payload = json.dumps({
-        "chat_id": CHAT_ID,
-        "text": message
-    }).encode("utf-8")
 
     request = urllib.request.Request(
         url,
-        data=payload,
-        headers={
-            "Content-Type": "application/json"
-        },
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
         method="POST"
     )
 
     try:
         with urllib.request.urlopen(
-            request, timeout=10
+            request, timeout=timeout
         ) as response:
-            result = json.loads(
-                response.read()
-            )
+            result = json.loads(response.read())
 
-        return bool(result.get("ok"))
+        if result.get("ok"):
+            return result
 
-    except Exception:
+        print("Telegram API request rejected", flush=True)
+
+    except urllib.error.HTTPError as error:
         print(
-            "Telegram delivery failed",
+            f"Telegram HTTP error: {error.code}",
             flush=True
         )
-        return False
+
+    except Exception as error:
+        print(
+            f"Telegram error: {type(error).__name__}",
+            flush=True
+        )
+
+    return None
+
+
+def send_alert(message):
+    result = telegram_request(
+        "sendMessage",
+        {
+            "chat_id": CHAT_ID,
+            "text": str(message)[:4000]
+        }
+    )
+
+    return result is not None
+
+
+def money(value):
+    try:
+        return f"${float(value):,.2f}"
+    except (TypeError, ValueError):
+        return "Unavailable"
+
+
+def signed_money(value):
+    try:
+        return f"${float(value):+,.2f}"
+    except (TypeError, ValueError):
+        return "Unavailable"
+
+
+def metric(value, suffix=""):
+    if value is None:
+        return "N/A"
+
+    try:
+        return f"{float(value):.2f}{suffix}"
+    except (TypeError, ValueError):
+        return str(value)
 
 
 def startup_alert(equity):
     return send_alert(
-        "ETH EDGE COMMANDER V2\n"
-        "AUTONOMOUS ENGINE ONLINE\n\n"
+        f"{VERSION}\n"
+        "🟢 AUTONOMOUS ENGINE ONLINE\n\n"
         "Mode: PAPER TRADING\n"
-        f"Equity: ${equity:,.2f}\n"
-        "Real execution: DISABLED"
+        f"Equity: {money(equity)}\n"
+        "Real execution: DISABLED\n\n"
+        "Send /help for available commands."
     )
 
 
 def trade_alert(approval):
-    direction = approval["verdict"]
+    direction = approval.get("verdict", "UNKNOWN")
 
     symbol = (
         "🟢" if direction == "LONG"
@@ -77,183 +111,338 @@ def trade_alert(approval):
     )
 
     return send_alert(
-        f"{symbol} {direction} — PAPER TRADE\n\n"
-        "ETH/USD\n"
-        f"Strategy: {approval['family']}\n\n"
-        f"Entry: ${approval['estimated_fill']:,.2f}\n"
-        f"Stop: ${approval['stop']:,.2f}\n"
-        f"TP1: ${approval['tp1']:,.2f}\n"
-        f"TP2: ${approval['tp2']:,.2f}\n\n"
-        f"Quantity: {approval['quantity']} ETH\n"
-        f"Notional: ${approval['notional']:,.2f}\n"
-        f"Leverage: {approval['leverage']}x\n"
-        f"Risk: ${approval['planned_loss']:,.2f}\n"
-        f"Potential profit: "
-        f"${approval['potential_profit']:,.2f}\n"
-        f"Net R:R: {approval['net_reward_risk']}\n\n"
+        f"{symbol} {VERSION}\n"
+        f"{direction} — PAPER TRADE OPENED\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        "Instrument: ETH/USD\n"
+        f"Strategy: {approval.get('family', 'Unknown')}\n\n"
+        f"Entry: {money(approval.get('estimated_fill'))}\n"
+        f"Stop loss: {money(approval.get('stop'))}\n"
+        f"Take profit 1: {money(approval.get('tp1'))}\n"
+        f"Take profit 2: {money(approval.get('tp2'))}\n\n"
+        "POSITION DETAILS\n"
+        f"Quantity: {approval.get('quantity')} ETH\n"
+        f"Notional: {money(approval.get('notional'))}\n"
+        f"Leverage: {approval.get('leverage')}x\n\n"
+        "RISK MANAGEMENT\n"
+        f"Planned risk: {money(approval.get('planned_loss'))}\n"
+        f"Potential profit: {money(approval.get('potential_profit'))}\n"
+        f"Net reward/risk: {metric(approval.get('net_reward_risk'), 'R')}\n\n"
         "Risk governor: APPROVED\n"
-        "Simulated execution only."
+        "Real execution: DISABLED\n\n"
+        "Simulated execution only.\n"
+        "Market prices and fills may differ from Kraken Prop."
     )
 
 
 def exit_alert(event, equity):
-    reason = event["reason"]
-    pnl = event["pnl"]
+    reason = event.get("reason", "EXIT")
+    pnl = event.get("pnl", 0)
 
-    icons = {
-        "TP1": "🎯",
-        "TP2": "🏆",
-        "STOP_LOSS": "🛑",
-        "EMERGENCY_EXIT": "🚨"
+    titles = {
+        "TP1": "🎯 TAKE PROFIT 1",
+        "TP2": "🏆 TAKE PROFIT 2",
+        "STOP_LOSS": "🛑 STOP LOSS",
+        "EMERGENCY_EXIT": "🚨 EMERGENCY EXIT"
     }
 
-    symbol = icons.get(reason, "📊")
+    title = titles.get(reason, "📊 POSITION EXIT")
 
     return send_alert(
-        f"{symbol} {reason}\n\n"
-        f"Exit: ${event['price']:,.2f}\n"
-        f"Quantity: {event['quantity']:.4f} ETH\n"
-        f"Net P&L: ${pnl:+,.2f}\n"
-        f"Account equity: ${equity:,.2f}\n\n"
+        f"{VERSION}\n"
+        f"{title}\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        f"Exit price: {money(event.get('price'))}\n"
+        f"Quantity closed: {event.get('quantity')} ETH\n"
+        f"Exit P&L: {signed_money(pnl)}\n\n"
+        f"Account equity: {money(equity)}\n\n"
         "Paper trading only."
     )
 
 
 def lockout_alert(reason, equity):
     return send_alert(
-        "🚨 MODULE X LOCKOUT\n\n"
-        "New trades disabled.\n"
+        f"{VERSION}\n"
+        "🚨 MODULE X RISK LOCKOUT\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        "New paper trades disabled.\n\n"
         f"Reason: {reason}\n"
-        f"Equity: ${equity:,.2f}"
+        f"Account equity: {money(equity)}\n\n"
+        "Capital protection activated."
+    )
+
+
+def performance_text(stats):
+    return (
+        f"{VERSION}\n"
+        "📊 ACCOUNT PERFORMANCE\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        f"Equity: {money(stats.get('equity'))}\n"
+        f"Balance: {money(stats.get('balance'))}\n"
+        f"Realized P&L: {signed_money(stats.get('realized_pnl'))}\n"
+        f"Open P&L: {signed_money(stats.get('unrealized_pnl'))}\n\n"
+        f"Closed trades: {stats.get('closed_trades', 0)}\n"
+        f"Wins: {stats.get('winning_trades', 0)}\n"
+        f"Losses: {stats.get('losing_trades', 0)}\n"
+        f"Win rate: {metric(stats.get('win_rate'), '%')}\n\n"
+        f"Profit factor: {metric(stats.get('profit_factor'))}\n"
+        f"Expectancy: {money(stats.get('expectancy'))}\n"
+        f"Average R: {metric(stats.get('average_r'), 'R')}\n"
+        f"Max drawdown: {money(stats.get('max_drawdown'))}\n"
+        f"Peak equity: {money(stats.get('peak_equity'))}\n\n"
+        "Paper trading performance only."
     )
 
 
 def performance_alert(stats):
-    return send_alert(
-        "📊 ETH EDGE COMMANDER REPORT\n\n"
-        f"Equity: ${stats['equity']:,.2f}\n"
-        f"Realized P&L: "
-        f"${stats['realized_pnl']:+,.2f}\n"
-        f"Closed trades: {stats['closed_trades']}\n"
-        f"Wins: {stats['winning_trades']}\n"
-        f"Losses: {stats['losing_trades']}\n"
-        f"Win rate: {stats['win_rate']}\n"
-        f"Profit factor: {stats['profit_factor']}\n"
-        f"Expectancy: {stats['expectancy']}\n"
-        f"Max drawdown: "
-        f"${stats['max_drawdown']:,.2f}\n\n"
-        "Paper trading performance."
+    return send_alert(performance_text(stats))
+
+
+def help_text():
+    return (
+        f"{VERSION}\n"
+        "⚡ TELEGRAM COMMAND CENTER\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        "/status - Market intelligence\n"
+        "/balance - Account balance\n"
+        "/positions - Open paper position\n"
+        "/report - Performance statistics\n"
+        "/health - Engine health\n"
+        "/risk - Risk governor status\n"
+        "/help - Available commands\n\n"
+        "All commands are read-only.\n"
+        "Real execution is disabled."
     )
+
+
+def data_is_fresh(state):
+    try:
+        updated = datetime.fromisoformat(
+            state["updated"].replace("Z", "+00:00")
+        )
+
+        age = (
+            datetime.now(timezone.utc) - updated
+        ).total_seconds()
+
+        return (
+            state.get("status") == "ONLINE"
+            and not state.get("error")
+            and 0 <= age <= 30
+        )
+
+    except (KeyError, TypeError, ValueError):
+        return False
 
 
 def command_response(command, state):
     account = state.get("account") or {}
-    equity = account.get("equity", 5000)
-    price = state.get("price") or 0
     analysis = state.get("analysis") or {}
+
+    if command in ("/help", "/start"):
+        return help_text()
+
+    fresh = data_is_fresh(state)
+
+    warning = (
+        "" if fresh else
+        "\n\n⚠️ Engine data may be stale or unavailable."
+    )
 
     if command == "/status":
         return (
-            "ETH EDGE COMMANDER V2.1\n\n"
-            f"ETH: ${price:,.2f}\n"
-            f"Trend: {analysis.get('trend', 'WAIT')}\n"
-            f"Structure: {analysis.get('structure', 'WAIT')}\n"
-            f"Verdict: {state.get('verdict')}\n"
-            f"Reason: {state.get('reason')}\n\n"
+            f"{VERSION}\n"
+            "📡 MARKET INTELLIGENCE\n"
+            "━━━━━━━━━━━━━━━━━━\n\n"
+            f"ETH: {money(state.get('price'))}\n"
+            f"Source: {state.get('market_source', 'Unknown')}\n"
+            f"Trend: {analysis.get('trend', 'Unknown')}\n"
+            f"Structure: {analysis.get('structure', 'Unknown')}\n\n"
+            f"Verdict: {state.get('verdict') if fresh else 'STALE'}\n"
+            f"Reason: {state.get('reason', 'Unavailable')}\n\n"
+            f"Completed scans: {state.get('scans', 0)}\n"
             "Mode: PAPER TRADING"
+            + warning
+        )
+
+    if command == "/health":
+        return (
+            f"{VERSION}\n"
+            "🖥 SYSTEM HEALTH\n"
+            "━━━━━━━━━━━━━━━━━━\n\n"
+            f"Status: {state.get('status', 'Unknown')}\n"
+            f"Data fresh: {'YES' if fresh else 'NO'}\n"
+            f"Scans: {state.get('scans', 0)}\n"
+            f"Last update: {state.get('updated')}\n"
+            f"Engine error: {'YES' if state.get('error') else 'None reported'}\n"
+            f"Trading locked: {account.get('trading_locked', 'Unknown')}\n\n"
+            "Real execution: DISABLED"
+            + warning
+        )
+
+    if command not in (
+        "/balance", "/positions", "/report", "/risk"
+    ):
+        return help_text()
+
+    if not account:
+        return (
+            "Account data is not available yet.\n"
+            "Try /health and check again shortly."
         )
 
     if command == "/balance":
         return (
-            "ACCOUNT BALANCE\n\n"
-            f"Equity: ${equity:,.2f}\n"
-            f"Balance: ${account.get('balance', 5000):,.2f}\n"
-            f"Realized P&L: ${account.get('realized_pnl', 0):+,.2f}\n"
-            f"Open P&L: ${account.get('unrealized_pnl', 0):+,.2f}"
+            f"{VERSION}\n"
+            "💰 PAPER ACCOUNT\n"
+            "━━━━━━━━━━━━━━━━━━\n\n"
+            f"Equity: {money(account.get('equity'))}\n"
+            f"Balance: {money(account.get('balance'))}\n"
+            f"Realized P&L: {signed_money(account.get('realized_pnl'))}\n"
+            f"Open P&L: {signed_money(account.get('unrealized_pnl'))}\n\n"
+            "Simulated funds only."
+            + warning
         )
 
     if command == "/positions":
         position = account.get("open_position")
 
         if not position:
-            return "No open paper positions."
+            return "No open paper positions." + warning
 
         return (
-            "OPEN PAPER POSITION\n\n"
-            + json.dumps(position, indent=2)[:3500]
+            f"{VERSION}\n"
+            "📍 OPEN PAPER POSITION\n"
+            "━━━━━━━━━━━━━━━━━━\n\n"
+            f"Direction: {position.get('direction')}\n"
+            f"Strategy: {position.get('family')}\n"
+            f"Entry: {money(position.get('entry'))}\n"
+            f"Current ETH: {money(state.get('price'))}\n"
+            f"Stop: {money(position.get('stop'))}\n"
+            f"TP1: {money(position.get('tp1'))}\n"
+            f"TP2: {money(position.get('tp2'))}\n\n"
+            f"Remaining: {position.get('remaining')} ETH\n"
+            f"Initial risk: {money(position.get('initial_risk'))}\n"
+            f"TP1 reached: {position.get('tp1_hit')}\n"
+            f"Realized P&L: {signed_money(position.get('realized_pnl'))}\n"
+            f"Open P&L: {signed_money(account.get('unrealized_pnl'))}"
+            + warning
         )
 
     if command == "/report":
-        return (
-            "PERFORMANCE REPORT\n\n"
-            f"Equity: ${equity:,.2f}\n"
-            f"Closed trades: {account.get('closed_trades', 0)}\n"
-            f"Wins: {account.get('winning_trades', 0)}\n"
-            f"Losses: {account.get('losing_trades', 0)}\n"
-            f"Win rate: {account.get('win_rate')}\n"
-            f"Profit factor: {account.get('profit_factor')}\n"
-            f"Expectancy: {account.get('expectancy')}\n"
-            f"Max drawdown: ${account.get('max_drawdown', 0):,.2f}\n\n"
-            "Paper trading only."
+        return performance_text(account) + warning
+
+    if command == "/risk":
+        equity = account.get("equity")
+        overall = state.get("overall_floor")
+        daily = state.get("daily_threshold")
+
+        buffer = None
+
+        try:
+            buffer = float(equity) - max(
+                float(overall), float(daily)
+            )
+        except (TypeError, ValueError):
+            pass
+
+        locked = account.get("trading_locked")
+
+        lock_status = (
+            "LOCKED" if locked is True else
+            "UNLOCKED" if locked is False else
+            "UNKNOWN"
         )
 
-    if command == "/health":
         return (
-            "SYSTEM HEALTH\n\n"
-            f"Status: {state.get('status')}\n"
-            f"Scans: {state.get('scans', 0)}\n"
-            f"Updated: {state.get('updated')}\n"
-            f"Error: {state.get('error')}\n"
-            f"Trading locked: {account.get('trading_locked')}\n"
+            f"{VERSION}\n"
+            "🛡 MODULE X RISK GOVERNOR\n"
+            "━━━━━━━━━━━━━━━━━━\n\n"
+            f"Equity: {money(equity)}\n"
+            f"Overall floor: {money(overall)}\n"
+            f"Daily threshold: {money(daily)}\n"
+            f"Remaining buffer: {money(buffer)}\n\n"
+            f"Trading status: {lock_status}\n"
+            f"Lock reason: {account.get('lock_reason') or 'None'}\n"
+            f"Max drawdown: {money(account.get('max_drawdown'))}\n\n"
+            "Daily threshold is currently fixed.\n"
             "Real execution: DISABLED"
+            + warning
         )
 
-    return (
-        "ETH EDGE COMMANDER COMMANDS\n\n"
-        "/status - Market analysis\n"
-        "/balance - Account balance\n"
-        "/positions - Open positions\n"
-        "/report - Performance report\n"
-        "/health - System health\n"
-        "/help - Command list"
+    return help_text()
+
+
+def register_commands():
+    return telegram_request(
+        "setMyCommands",
+        {
+            "commands": [
+                {
+                    "command": "status",
+                    "description": "Market intelligence"
+                },
+                {
+                    "command": "balance",
+                    "description": "Paper account balance"
+                },
+                {
+                    "command": "positions",
+                    "description": "Open paper positions"
+                },
+                {
+                    "command": "report",
+                    "description": "Performance statistics"
+                },
+                {
+                    "command": "health",
+                    "description": "Engine health"
+                },
+                {
+                    "command": "risk",
+                    "description": "Risk governor"
+                },
+                {
+                    "command": "help",
+                    "description": "Available commands"
+                }
+            ]
+        }
     )
 
 
 def command_listener(get_state):
-    import time
-
     if not BOT_TOKEN or not CHAT_ID:
+        print(
+            "Telegram credentials missing",
+            flush=True
+        )
         return
+
+    register_commands()
 
     offset = 0
 
+    print(
+        "Telegram command center started",
+        flush=True
+    )
+
     while True:
         try:
-            url = (
-                "https://api.telegram.org/bot"
-                + BOT_TOKEN
-                + "/getUpdates"
-            )
-
-            payload = json.dumps({
-                "offset": offset,
-                "timeout": 25,
-                "allowed_updates": ["message"]
-            }).encode("utf-8")
-
-            request = urllib.request.Request(
-                url,
-                data=payload,
-                headers={
-                    "Content-Type": "application/json"
+            result = telegram_request(
+                "getUpdates",
+                {
+                    "offset": offset,
+                    "timeout": 25,
+                    "allowed_updates": ["message"]
                 },
-                method="POST"
+                timeout=35
             )
 
-            with urllib.request.urlopen(
-                request, timeout=35
-            ) as response:
-                result = json.loads(response.read())
+            if result is None:
+                time.sleep(10)
+                continue
 
             for update in result.get("result", []):
                 offset = update["update_id"] + 1
@@ -267,147 +456,9 @@ def command_listener(get_state):
                 if chat.get("type") != "private":
                     continue
 
-                text = message.get("text", "").strip()
+                message_time = message.get("date", 0)
 
-                if not text.startswith("/"):
-                    continue
-
-                command = text.split()[0].split("@")[0].lower()
-
-                state = get_state()
-
-                send_alert(
-                    command_response(command, state)
-                )
-
-        except Exception:
-            print(
-                "Telegram command listener error",
-                flush=True
-            )
-            time.sleep(10)
-
-
-
-def command_response(command, state):
-    account = state.get("account") or {}
-    equity = account.get("equity", 5000)
-    price = state.get("price") or 0
-    analysis = state.get("analysis") or {}
-
-    if command == "/status":
-        return (
-            "ETH EDGE COMMANDER V2.1\n\n"
-            f"ETH: ${price:,.2f}\n"
-            f"Trend: {analysis.get('trend', 'WAIT')}\n"
-            f"Structure: {analysis.get('structure', 'WAIT')}\n"
-            f"Verdict: {state.get('verdict')}\n"
-            f"Reason: {state.get('reason')}\n\n"
-            "Mode: PAPER TRADING"
-        )
-
-    if command == "/balance":
-        return (
-            "ACCOUNT BALANCE\n\n"
-            f"Equity: ${equity:,.2f}\n"
-            f"Balance: ${account.get('balance', 5000):,.2f}\n"
-            f"Realized P&L: ${account.get('realized_pnl', 0):+,.2f}\n"
-            f"Open P&L: ${account.get('unrealized_pnl', 0):+,.2f}"
-        )
-
-    if command == "/positions":
-        position = account.get("open_position")
-
-        if not position:
-            return "No open paper positions."
-
-        return (
-            "OPEN PAPER POSITION\n\n"
-            + json.dumps(position, indent=2)[:3500]
-        )
-
-    if command == "/report":
-        return (
-            "PERFORMANCE REPORT\n\n"
-            f"Equity: ${equity:,.2f}\n"
-            f"Closed trades: {account.get('closed_trades', 0)}\n"
-            f"Wins: {account.get('winning_trades', 0)}\n"
-            f"Losses: {account.get('losing_trades', 0)}\n"
-            f"Win rate: {account.get('win_rate')}\n"
-            f"Profit factor: {account.get('profit_factor')}\n"
-            f"Expectancy: {account.get('expectancy')}\n"
-            f"Max drawdown: ${account.get('max_drawdown', 0):,.2f}\n\n"
-            "Paper trading only."
-        )
-
-    if command == "/health":
-        return (
-            "SYSTEM HEALTH\n\n"
-            f"Status: {state.get('status')}\n"
-            f"Scans: {state.get('scans', 0)}\n"
-            f"Updated: {state.get('updated')}\n"
-            f"Error: {state.get('error')}\n"
-            f"Trading locked: {account.get('trading_locked')}\n"
-            "Real execution: DISABLED"
-        )
-
-    return (
-        "ETH EDGE COMMANDER COMMANDS\n\n"
-        "/status - Market analysis\n"
-        "/balance - Account balance\n"
-        "/positions - Open positions\n"
-        "/report - Performance report\n"
-        "/health - System health\n"
-        "/help - Command list"
-    )
-
-
-def command_listener(get_state):
-    import time
-
-    if not BOT_TOKEN or not CHAT_ID:
-        return
-
-    offset = 0
-
-    while True:
-        try:
-            url = (
-                "https://api.telegram.org/bot"
-                + BOT_TOKEN
-                + "/getUpdates"
-            )
-
-            payload = json.dumps({
-                "offset": offset,
-                "timeout": 25,
-                "allowed_updates": ["message"]
-            }).encode("utf-8")
-
-            request = urllib.request.Request(
-                url,
-                data=payload,
-                headers={
-                    "Content-Type": "application/json"
-                },
-                method="POST"
-            )
-
-            with urllib.request.urlopen(
-                request, timeout=35
-            ) as response:
-                result = json.loads(response.read())
-
-            for update in result.get("result", []):
-                offset = update["update_id"] + 1
-
-                message = update.get("message", {})
-                chat = message.get("chat", {})
-
-                if str(chat.get("id")) != str(CHAT_ID):
-                    continue
-
-                if chat.get("type") != "private":
+                if time.time() - message_time > 120:
                     continue
 
                 text = message.get("text", "").strip()
@@ -415,18 +466,25 @@ def command_listener(get_state):
                 if not text.startswith("/"):
                     continue
 
-                command = text.split()[0].split("@")[0].lower()
+                command = (
+                    text.split()[0]
+                    .split("@")[0]
+                    .lower()
+                )
 
                 state = get_state()
 
-                send_alert(
-                    command_response(command, state)
+                response = command_response(
+                    command, state
                 )
 
-        except Exception:
+                send_alert(response)
+
+        except Exception as error:
             print(
-                "Telegram command listener error",
+                "Telegram listener error: "
+                + type(error).__name__,
                 flush=True
             )
-            time.sleep(10)
 
+            time.sleep(10)
