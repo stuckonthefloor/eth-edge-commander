@@ -5,14 +5,15 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timezone
 
+VERSION = "ETH EDGE COMMANDER V2.1"
+
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
-
-VERSION = "ETH EDGE COMMANDER V2.1"
 
 
 def telegram_request(method, payload, timeout=15):
     if not BOT_TOKEN or not CHAT_ID:
+        print("Telegram not configured", flush=True)
         return None
 
     url = (
@@ -38,7 +39,7 @@ def telegram_request(method, payload, timeout=15):
         if result.get("ok"):
             return result
 
-        print("Telegram API request rejected", flush=True)
+        print("Telegram request rejected", flush=True)
 
     except urllib.error.HTTPError as error:
         print(
@@ -81,12 +82,12 @@ def signed_money(value):
         return "Unavailable"
 
 
-def metric(value, suffix=""):
+def metric(value):
     if value is None:
         return "N/A"
 
     try:
-        return f"{float(value):.2f}{suffix}"
+        return f"{float(value):.2f}"
     except (TypeError, ValueError):
         return str(value)
 
@@ -94,21 +95,19 @@ def metric(value, suffix=""):
 def startup_alert(equity):
     return send_alert(
         f"{VERSION}\n"
-        "🟢 AUTONOMOUS ENGINE ONLINE\n\n"
+        "🟢 AUTONOMOUS ENGINE ONLINE\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
         "Mode: PAPER TRADING\n"
+        "Instrument: ETH/USD\n"
         f"Equity: {money(equity)}\n"
-        "Real execution: DISABLED\n\n"
-        "Send /help for available commands."
+        "Real execution: DISABLED"
     )
 
 
 def trade_alert(approval):
     direction = approval.get("verdict", "UNKNOWN")
 
-    symbol = (
-        "🟢" if direction == "LONG"
-        else "🔴"
-    )
+    symbol = "🟢" if direction == "LONG" else "🔴"
 
     return send_alert(
         f"{symbol} {VERSION}\n"
@@ -127,17 +126,16 @@ def trade_alert(approval):
         "RISK MANAGEMENT\n"
         f"Planned risk: {money(approval.get('planned_loss'))}\n"
         f"Potential profit: {money(approval.get('potential_profit'))}\n"
-        f"Net reward/risk: {metric(approval.get('net_reward_risk'), 'R')}\n\n"
+        f"Net reward/risk: {metric(approval.get('net_reward_risk'))}R\n\n"
         "Risk governor: APPROVED\n"
         "Real execution: DISABLED\n\n"
         "Simulated execution only.\n"
-        "Market prices and fills may differ from Kraken Prop."
+        "Kraken Prop prices and fills may differ."
     )
 
 
 def exit_alert(event, equity):
     reason = event.get("reason", "EXIT")
-    pnl = event.get("pnl", 0)
 
     titles = {
         "TP1": "🎯 TAKE PROFIT 1",
@@ -152,9 +150,10 @@ def exit_alert(event, equity):
         f"{VERSION}\n"
         f"{title}\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
+        f"Reason: {reason}\n"
         f"Exit price: {money(event.get('price'))}\n"
         f"Quantity closed: {event.get('quantity')} ETH\n"
-        f"Exit P&L: {signed_money(pnl)}\n\n"
+        f"Exit P&L: {signed_money(event.get('pnl'))}\n\n"
         f"Account equity: {money(equity)}\n\n"
         "Paper trading only."
     )
@@ -167,7 +166,7 @@ def lockout_alert(reason, equity):
         "━━━━━━━━━━━━━━━━━━\n\n"
         "New paper trades disabled.\n\n"
         f"Reason: {reason}\n"
-        f"Account equity: {money(equity)}\n\n"
+        f"Equity: {money(equity)}\n\n"
         "Capital protection activated."
     )
 
@@ -175,19 +174,18 @@ def lockout_alert(reason, equity):
 def performance_text(stats):
     return (
         f"{VERSION}\n"
-        "📊 ACCOUNT PERFORMANCE\n"
+        "📊 PERFORMANCE REPORT\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
         f"Equity: {money(stats.get('equity'))}\n"
         f"Balance: {money(stats.get('balance'))}\n"
         f"Realized P&L: {signed_money(stats.get('realized_pnl'))}\n"
         f"Open P&L: {signed_money(stats.get('unrealized_pnl'))}\n\n"
-        f"Closed trades: {stats.get('closed_trades', 0)}\n"
-        f"Wins: {stats.get('winning_trades', 0)}\n"
-        f"Losses: {stats.get('losing_trades', 0)}\n"
-        f"Win rate: {metric(stats.get('win_rate'), '%')}\n\n"
+        f"Closed trades: {stats.get('closed_trades', 'N/A')}\n"
+        f"Wins: {stats.get('winning_trades', 'N/A')}\n"
+        f"Losses: {stats.get('losing_trades', 'N/A')}\n"
+        f"Win rate: {stats.get('win_rate', 'N/A')}\n"
         f"Profit factor: {metric(stats.get('profit_factor'))}\n"
-        f"Expectancy: {money(stats.get('expectancy'))}\n"
-        f"Average R: {metric(stats.get('average_r'), 'R')}\n"
+        f"Expectancy: {metric(stats.get('expectancy'))}\n"
         f"Max drawdown: {money(stats.get('max_drawdown'))}\n"
         f"Peak equity: {money(stats.get('peak_equity'))}\n\n"
         "Paper trading performance only."
@@ -205,7 +203,7 @@ def help_text():
         "━━━━━━━━━━━━━━━━━━\n\n"
         "/status - Market intelligence\n"
         "/balance - Account balance\n"
-        "/positions - Open paper position\n"
+        "/positions - Open paper positions\n"
         "/report - Performance statistics\n"
         "/health - Engine health\n"
         "/risk - Risk governor status\n"
@@ -231,7 +229,7 @@ def data_is_fresh(state):
             and 0 <= age <= 30
         )
 
-    except (KeyError, TypeError, ValueError):
+    except (KeyError, TypeError, ValueError, AttributeError):
         return False
 
 
@@ -305,27 +303,36 @@ def command_response(command, state):
         )
 
     if command == "/positions":
-        position = account.get("open_position")
+        if "open_position" in account:
+            position = account["open_position"]
+        elif "position" in account:
+            position = account["position"]
+        else:
+            return (
+                "Position data unavailable."
+                + warning
+            )
 
         if not position:
             return "No open paper positions." + warning
+
+        if not isinstance(position, dict):
+            return (
+                "Open position data:\n"
+                + str(position)
+                + warning
+            )
 
         return (
             f"{VERSION}\n"
             "📍 OPEN PAPER POSITION\n"
             "━━━━━━━━━━━━━━━━━━\n\n"
-            f"Direction: {position.get('direction')}\n"
-            f"Strategy: {position.get('family')}\n"
-            f"Entry: {money(position.get('entry'))}\n"
-            f"Current ETH: {money(state.get('price'))}\n"
-            f"Stop: {money(position.get('stop'))}\n"
-            f"TP1: {money(position.get('tp1'))}\n"
-            f"TP2: {money(position.get('tp2'))}\n\n"
-            f"Remaining: {position.get('remaining')} ETH\n"
-            f"Initial risk: {money(position.get('initial_risk'))}\n"
-            f"TP1 reached: {position.get('tp1_hit')}\n"
-            f"Realized P&L: {signed_money(position.get('realized_pnl'))}\n"
-            f"Open P&L: {signed_money(account.get('unrealized_pnl'))}"
+            f"Current ETH: {money(state.get('price'))}\n\n"
+            + json.dumps(
+                position,
+                indent=2,
+                default=str
+            )[:3000]
             + warning
         )
 
@@ -341,7 +348,8 @@ def command_response(command, state):
 
         try:
             buffer = float(equity) - max(
-                float(overall), float(daily)
+                float(overall),
+                float(daily)
             )
         except (TypeError, ValueError):
             pass
@@ -363,7 +371,7 @@ def command_response(command, state):
             f"Daily threshold: {money(daily)}\n"
             f"Remaining buffer: {money(buffer)}\n\n"
             f"Trading status: {lock_status}\n"
-            f"Lock reason: {account.get('lock_reason') or 'None'}\n"
+            f"Lock reason: {account.get('lock_reason') or 'Not reported'}\n"
             f"Max drawdown: {money(account.get('max_drawdown'))}\n\n"
             "Daily threshold is currently fixed.\n"
             "Real execution: DISABLED"
@@ -374,38 +382,25 @@ def command_response(command, state):
 
 
 def register_commands():
+    commands = [
+        ("status", "Market intelligence"),
+        ("balance", "Paper account balance"),
+        ("positions", "Open paper positions"),
+        ("report", "Performance statistics"),
+        ("health", "Engine health"),
+        ("risk", "Risk governor"),
+        ("help", "Available commands")
+    ]
+
     return telegram_request(
         "setMyCommands",
         {
             "commands": [
                 {
-                    "command": "status",
-                    "description": "Market intelligence"
-                },
-                {
-                    "command": "balance",
-                    "description": "Paper account balance"
-                },
-                {
-                    "command": "positions",
-                    "description": "Open paper positions"
-                },
-                {
-                    "command": "report",
-                    "description": "Performance statistics"
-                },
-                {
-                    "command": "health",
-                    "description": "Engine health"
-                },
-                {
-                    "command": "risk",
-                    "description": "Risk governor"
-                },
-                {
-                    "command": "help",
-                    "description": "Available commands"
+                    "command": command,
+                    "description": description
                 }
+                for command, description in commands
             ]
         }
     )
@@ -475,7 +470,8 @@ def command_listener(get_state):
                 state = get_state()
 
                 response = command_response(
-                    command, state
+                    command,
+                    state
                 )
 
                 send_alert(response)
