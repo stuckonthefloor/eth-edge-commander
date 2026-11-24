@@ -286,3 +286,147 @@ def command_listener(get_state):
                 flush=True
             )
             time.sleep(10)
+
+
+
+def command_response(command, state):
+    account = state.get("account") or {}
+    equity = account.get("equity", 5000)
+    price = state.get("price") or 0
+    analysis = state.get("analysis") or {}
+
+    if command == "/status":
+        return (
+            "ETH EDGE COMMANDER V2.1\n\n"
+            f"ETH: ${price:,.2f}\n"
+            f"Trend: {analysis.get('trend', 'WAIT')}\n"
+            f"Structure: {analysis.get('structure', 'WAIT')}\n"
+            f"Verdict: {state.get('verdict')}\n"
+            f"Reason: {state.get('reason')}\n\n"
+            "Mode: PAPER TRADING"
+        )
+
+    if command == "/balance":
+        return (
+            "ACCOUNT BALANCE\n\n"
+            f"Equity: ${equity:,.2f}\n"
+            f"Balance: ${account.get('balance', 5000):,.2f}\n"
+            f"Realized P&L: ${account.get('realized_pnl', 0):+,.2f}\n"
+            f"Open P&L: ${account.get('unrealized_pnl', 0):+,.2f}"
+        )
+
+    if command == "/positions":
+        position = account.get("open_position")
+
+        if not position:
+            return "No open paper positions."
+
+        return (
+            "OPEN PAPER POSITION\n\n"
+            + json.dumps(position, indent=2)[:3500]
+        )
+
+    if command == "/report":
+        return (
+            "PERFORMANCE REPORT\n\n"
+            f"Equity: ${equity:,.2f}\n"
+            f"Closed trades: {account.get('closed_trades', 0)}\n"
+            f"Wins: {account.get('winning_trades', 0)}\n"
+            f"Losses: {account.get('losing_trades', 0)}\n"
+            f"Win rate: {account.get('win_rate')}\n"
+            f"Profit factor: {account.get('profit_factor')}\n"
+            f"Expectancy: {account.get('expectancy')}\n"
+            f"Max drawdown: ${account.get('max_drawdown', 0):,.2f}\n\n"
+            "Paper trading only."
+        )
+
+    if command == "/health":
+        return (
+            "SYSTEM HEALTH\n\n"
+            f"Status: {state.get('status')}\n"
+            f"Scans: {state.get('scans', 0)}\n"
+            f"Updated: {state.get('updated')}\n"
+            f"Error: {state.get('error')}\n"
+            f"Trading locked: {account.get('trading_locked')}\n"
+            "Real execution: DISABLED"
+        )
+
+    return (
+        "ETH EDGE COMMANDER COMMANDS\n\n"
+        "/status - Market analysis\n"
+        "/balance - Account balance\n"
+        "/positions - Open positions\n"
+        "/report - Performance report\n"
+        "/health - System health\n"
+        "/help - Command list"
+    )
+
+
+def command_listener(get_state):
+    import time
+
+    if not BOT_TOKEN or not CHAT_ID:
+        return
+
+    offset = 0
+
+    while True:
+        try:
+            url = (
+                "https://api.telegram.org/bot"
+                + BOT_TOKEN
+                + "/getUpdates"
+            )
+
+            payload = json.dumps({
+                "offset": offset,
+                "timeout": 25,
+                "allowed_updates": ["message"]
+            }).encode("utf-8")
+
+            request = urllib.request.Request(
+                url,
+                data=payload,
+                headers={
+                    "Content-Type": "application/json"
+                },
+                method="POST"
+            )
+
+            with urllib.request.urlopen(
+                request, timeout=35
+            ) as response:
+                result = json.loads(response.read())
+
+            for update in result.get("result", []):
+                offset = update["update_id"] + 1
+
+                message = update.get("message", {})
+                chat = message.get("chat", {})
+
+                if str(chat.get("id")) != str(CHAT_ID):
+                    continue
+
+                if chat.get("type") != "private":
+                    continue
+
+                text = message.get("text", "").strip()
+
+                if not text.startswith("/"):
+                    continue
+
+                command = text.split()[0].split("@")[0].lower()
+
+                state = get_state()
+
+                send_alert(
+                    command_response(command, state)
+                )
+
+        except Exception:
+            print(
+                "Telegram command listener error",
+                flush=True
+            )
+            time.sleep(10)
+
