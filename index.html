@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<title>ETH EDGE COMMANDER</title>
+<style>
+:root{--bg:#090e1b;--panel:#111a2b;--panel2:#162238;--line:#26344c;--text:#edf3ff;--muted:#9aabc5;--green:#40d6a2;--red:#ff6b7a;--amber:#f7c66a;--blue:#79a9ff}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#142442 0,#090e1b 55%);color:var(--text);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.wrap{max-width:1080px;margin:auto;padding:18px 14px 40px}.top{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:16px}
+.brand{font-weight:900;letter-spacing:.08em;font-size:15px}.brand small{display:block;color:var(--muted);font-weight:500;letter-spacing:.03em;margin-top:4px}
+.pill{border:1px solid #365070;border-radius:99px;padding:7px 10px;color:var(--green);font-size:12px;white-space:nowrap}
+h1{font-size:25px;line-height:1.1;margin:8px 0}h2{font-size:15px;margin:0 0 12px}
+.sub{color:var(--muted);font-size:13px}.grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px}.card{background:linear-gradient(160deg,rgba(22,34,56,.96),rgba(14,22,38,.98));border:1px solid var(--line);border-radius:17px;padding:15px;min-width:0}.span12{grid-column:span 12}.span8{grid-column:span 8}.span6{grid-column:span 6}.span4{grid-column:span 4}
+.metric{font-size:25px;font-weight:800;letter-spacing:-.03em}.label{font-size:12px;color:var(--muted);margin-bottom:5px}.row{display:flex;justify-content:space-between;align-items:center;gap:10px}.status{display:inline-block;border-radius:7px;padding:4px 8px;font-size:11px;font-weight:800;letter-spacing:.04em}.good{background:#103b35;color:var(--green)}.bad{background:#451e2a;color:var(--red)}.wait{background:#43351a;color:var(--amber)}
+button{border:0;border-radius:11px;background:var(--blue);color:#07101e;font-weight:800;padding:11px 13px;font-size:13px;cursor:pointer}button.secondary{background:#253653;color:var(--text);border:1px solid #344967}button.danger{background:#48202b;color:#ffb2ba;border:1px solid #74313e}button:disabled{opacity:.45}
+.actions{display:flex;gap:8px;flex-wrap:wrap}.signal{font-size:22px;font-weight:900;margin:6px 0}.price{font-size:30px;font-weight:900;letter-spacing:-.04em}.positive{color:var(--green)}.negative{color:var(--red)}
+.kv{display:grid;grid-template-columns:1fr auto;gap:7px;font-size:13px}.kv span:nth-child(odd){color:var(--muted)}.kv span:nth-child(even){text-align:right;font-variant-numeric:tabular-nums}
+input,select{width:100%;background:#0b1425;border:1px solid #30415c;border-radius:9px;padding:10px;color:var(--text);font:inherit}label{display:block;color:var(--muted);font-size:12px;margin:8px 0 5px}.formgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+table{width:100%;border-collapse:collapse;font-size:12px}th,td{text-align:left;padding:9px 6px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted);font-weight:600}td{font-variant-numeric:tabular-nums}.scroll{overflow:auto}
+.note{border-left:3px solid var(--amber);padding:9px 11px;background:#251f18;border-radius:0 8px 8px 0;color:#f5d9a1;font-size:12px}
+.footer{color:var(--muted);font-size:11px;text-align:center;margin:18px 0 0}.dot{width:7px;height:7px;background:var(--green);display:inline-block;border-radius:100%;margin-right:5px}
+@media(max-width:700px){.span8,.span6,.span4{grid-column:span 12}.metric{font-size:23px}.wrap{padding:13px 10px 30px}.top{align-items:flex-start}h1{font-size:23px}.price{font-size:27px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="brand">◈ ETH EDGE COMMANDER<small>AI-READY · PAPER DESK · MODULE X</small></div>
+    <div class="pill"><span class="dot"></span><span id="connection">CONNECTING</span></div>
+  </div>
+  <div class="row" style="align-items:flex-end;margin-bottom:14px">
+    <div><h1>Trading desk</h1><div class="sub">ETH/USD · Rule-based scanner · Manual Prop execution only</div></div>
+    <div class="sub" id="updated">Waiting for data…</div>
+  </div>
+
+  <div class="grid">
+    <section class="card span4">
+      <div class="label">ETH/USD LAST PRICE</div><div class="price" id="price">—</div>
+      <div class="sub" id="priceMeta">Public Kraken market data</div>
+      <div style="height:12px"></div>
+      <div class="kv"><span>1H trend</span><span id="trend1h">—</span><span>15m structure</span><span id="structure15">—</span><span>5m trigger</span><span id="trigger5">—</span></div>
+    </section>
+    <section class="card span4">
+      <div class="row"><h2>Commander verdict</h2><span id="scoreBadge" class="status wait">SCANNING</span></div>
+      <div id="verdict" class="signal">Waiting for candles</div>
+      <div id="setupName" class="sub">Both strategies enabled</div>
+      <div style="height:10px"></div><div id="reasons" class="sub">Loading recent ETH/USD candles…</div>
+      <div style="height:12px"></div><div class="actions"><button id="paperBtn" disabled>Simulate this setup</button><button id="refreshBtn" class="secondary">Refresh data</button></div>
+    </section>
+    <section class="card span4">
+      <h2>Paper account</h2>
+      <div class="label">SIMULATED EQUITY</div><div class="metric" id="paperEquity">$5,000.00</div>
+      <div style="height:10px"></div><div class="kv"><span>Net realized P&L</span><span id="realized">$0.00</span><span>Open P&L</span><span id="openPnl">$0.00</span><span>Closed trades</span><span id="tradeCount">0</span><span>Win rate</span><span id="winRate">—</span></div>
+      <div style="height:12px"></div><button class="secondary" id="resetBtn">Reset paper account</button>
+    </section>
+
+    <section class="card span6">
+      <h2>Module X risk governor</h2>
+      <div class="note">Paper simulation only. These settings do not connect to or control your Kraken Prop account.</div>
+      <div class="formgrid">
+        <div><label for="startingEquity">Paper starting equity ($)</label><input id="startingEquity" type="number" value="5000" min="100" step="100"></div>
+        <div><label for="risk">Risk per trade ($)</label><input id="risk" type="number" value="20" min="1" step="1"></div>
+        <div><label for="floor">Overall floor ($)</label><input id="floor" type="number" value="4700" min="0" step="50"></div>
+        <div><label for="dailyFloor">Daily threshold ($)</label><input id="dailyFloor" type="number" value="4792.26" min="0" step="1"></div>
+        <div><label for="fee">Commission per side (%)</label><input id="fee" type="number" value="0.04" min="0" step="0.01"></div>
+        <div><label for="slippage">Slippage allowance (%)</label><input id="slippage" type="number" value="0.02" min="0" step="0.01"></div>
+      </div>
+      <div class="sub" style="margin-top:10px">The daily threshold is the last value you supplied; update it from your current dashboard before using this app for decisions.</div>
+    </section>
+    <section class="card span6">
+      <h2>Current setup plan</h2>
+      <div class="kv"><span>Setup family</span><span id="planFamily">—</span><span>Direction</span><span id="planSide">—</span><span>Reference entry</span><span id="planEntry">—</span><span>Structural stop</span><span id="planStop">—</span><span>TP1 (50%)</span><span id="planTp1">—</span><span>TP2 (remaining)</span><span id="planTp2">—</span><span>Quantity</span><span id="planQty">—</span><span>Planned stop risk</span><span id="planRisk">—</span><span>Reward / risk to TP2</span><span id="planRR">—</span></div>
+      <div class="sub" style="margin-top:10px" id="planDisclaimer">Prices are estimates from public candles; setup must pass every hard gate.</div>
+    </section>
+    <section class="card span12">
+      <div class="row"><h2>Open paper position</h2><span id="positionState" class="status wait">FLAT</span></div>
+      <div id="openPosition" class="sub">No simulated position open.</div>
+      <div class="actions" style="margin-top:12px"><button id="closeBtn" class="danger" disabled>Close paper position at market</button></div>
+    </section>
+    <section class="card span12">
+      <div class="row"><h2>Paper trade ledger</h2><span class="sub">Saved in this browser on this device</span></div>
+      <div class="scroll"><table><thead><tr><th># / Time</th><th>Side / Setup</th><th>Entry → Exit</th><th>Net P&L</th><th>Outcome</th></tr></thead><tbody id="ledger"><tr><td colspan="5" class="sub">No closed paper trades yet.</td></tr></tbody></table></div>
+    </section>
+    <section class="card span12">
+      <h2>Operating notes</h2>
+      <div class="sub">• Scanner evaluates completed candles; no signal is a promise of profit.<br>• Paper fills are approximations and cannot reproduce queue priority, exact fees, funding, or real slippage.<br>• Browser polling pauses or slows when the page is backgrounded. This is not an always-on server bot yet.<br>• Do not use this version to place live orders. No private keys are requested or stored.</div>
+    </section>
+  </div>
+  <div class="footer">MODULE X · EVIDENCE FIRST · RISK SECOND · EXECUTION THIRD · SCALE ONLY WHEN EARNED</div>
+</div>
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const fmt = n => Number.isFinite(n) ? n.toLocaleString('en-US',{style:'currency',currency:'USD',minimumFractionDigits:2,maximumFractionDigits:2}) : '—';
+const px = n => Number.isFinite(n) ? n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—';
+const KEY='eth-edge-commander-v1';
+let candles={5:[],15:[],60:[]}, lastPrice=null, currentSetup=null, position=null, history=[], equity=5000, realized=0, dailyStart=5000, dayKey=new Date().toISOString().slice(0,10), busy=false;
+
+function loadState(){
+ try{const s=JSON.parse(localStorage.getItem(KEY)||'null');if(s){equity=+s.equity||5000;realized=+s.realized||0;history=Array.isArray(s.history)?s.history:[];position=s.position||null;dailyStart=+s.dailyStart||equity;dayKey=s.dayKey||dayKey;}}
+ catch(e){}
+ $('startingEquity').value=localStorage.getItem('edge_starting')||'5000';
+ $('risk').value=localStorage.getItem('edge_risk')||'20';
+ $('floor').value=localStorage.getItem('edge_floor')||'4700';
+ $('dailyFloor').value=localStorage.getItem('edge_daily')||'4792.26';
+ $('fee').value=localStorage.getItem('edge_fee')||'0.04';
+ $('slippage').value=localStorage.getItem('edge_slippage')||'0.02';
+ if(!localStorage.getItem(KEY)){equity=+$('startingEquity').value;dailyStart=equity;}
+}
+function saveState(){
+ try{localStorage.setItem(KEY,JSON.stringify({equity,realized,history,position,dailyStart,dayKey}));}catch(e){}
+ ['startingEquity','risk','floor','dailyFloor','fee','slippage'].forEach(id=>localStorage.setItem('edge_'+({startingEquity:'starting',dailyFloor:'daily',slippage:'slippage'}[id]||id),$(id).value));
+}
+function cfg(){return {risk:Math.max(0,+$('risk').value||0),floor:+$('floor').value||0,daily:+$('dailyFloor').value||0,fee:(+$('fee').value||0)/100,slip:(+$('slippage').value||0)/100};}
+function numCandle(row){return {time:+row[0],open:+row[1],high:+row[2],low:+row[3],close:+row[4],vwap:+row[5],volume:+row[6]};}
+async function fetchCandles(interval){
+ const url=`https://api.kraken.com/0/public/OHLC?pair=ETHUSD&interval=${interval}`;
+ const res=await fetch(url,{cache:'no-store'}); if(!res.ok)throw new Error('Kraken HTTP '+res.status);
+ const json=await res.json(); if(json.error&&json.error.length)throw new Error(json.error.join(', '));
+ const key=Object.keys(json.result||{}).find(k=>k!=='last');
+ if(!key||!json.result[key])throw new Error('No candle data returned for interval '+interval);
+ return json.result[key].map(numCandle);
+}
+function sma(arr,n){if(arr.length<n)return null;return arr.slice(-n).reduce((a,c)=>a+c.close,0)/n;}
+function atr(arr,n=14){if(arr.length<n+1)return null;const x=arr.slice(-(n+1));let sum=0;for(let i=1;i<x.length;i++)sum+=Math.max(x[i].high-x[i].low,Math.abs(x[i].high-x[i-1].close),Math.abs(x[i].low-x[i-1].close));return sum/n;}
+function trend(arr){if(arr.length<25)return 'INSUFFICIENT DATA';const a=arr[arr.length-2], ma=sma(arr.slice(0,-1),20), older=arr[arr.length-7]?.close; if(!ma||!older)return 'NEUTRAL';if(a.close>ma&&a.close>older)return 'BULLISH';if(a.close<ma&&a.close<older)return 'BEARISH';return 'NEUTRAL';}
+function detectSetup(){
+ const h=candles[60], m=candles[15], f=candles[5]; if(h.length<30||m.length<30||f.length<55)return {status:'WAIT',reason:'Need at least 30 hourly/15m candles and 55 five-minute candles before evaluating a setup.'};
+ const hc=h.slice(0,-1), mc=m.slice(0,-1), fc=f.slice(0,-1); // ignore running candle
+ const bias=trend(hc), sma50=sma(fc,50), prevSma=sma(fc.slice(0,-1),50), c=fc[fc.length-1], p=fc[fc.length-2], prev=mc[mc.length-1];
+ const a=atr(fc,14)||c.close*.003, hi=mc.slice(-20,-1).reduce((v,x)=>Math.max(v,x.high),-Infinity), lo=mc.slice(-20,-1).reduce((v,x)=>Math.min(v,x.low),Infinity);
+ const bullish5=c.close>sma50&&sma50>=prevSma&&c.close>c.open, bearish5=c.close<sma50&&sma50<=prevSma&&c.close<c.open;
+ // Trend pullback: higher timeframe bias + pullback toward prior short-term mean + directional closed candle.
+ const fma20=sma(fc,20), prev2=fc[fc.length-3];
+ let candidate=null;
+ if(bias==='BULLISH'&&bullish5&&fma20&&Math.min(p.low,c.low)<=fma20+a*.25&&c.close>p.high*.999){
+   candidate={side:'LONG',family:'Trend pullback',entry:c.close,stop:Math.min(c.low,p.low,lo),reason:'1H bullish context; closed 5m candle is above rising 50 SMA and reclaims the short-term mean.'};
+ } else if(bias==='BEARISH'&&bearish5&&fma20&&Math.max(p.high,c.high)>=fma20-a*.25&&c.close<p.low*1.001){
+   candidate={side:'SHORT',family:'Trend pullback',entry:c.close,stop:Math.max(c.high,p.high,hi),reason:'1H bearish context; closed 5m candle is below falling 50 SMA and rejects the short-term mean.'};
+ }
+ // Conservative range breakout/retest proxy: break a recent 15m swing level, then last closed 5m candle holds the boundary.
+ if(!candidate&&bullish5&&bias!=='BEARISH'&&c.close>hi&&p.close<=hi){
+   candidate={side:'LONG',family:'ORB / breakout continuation',entry:c.close,stop:Math.min(p.low,hi-a*.15),reason:'Closed 5m candle breaks above the recent 15m range with bullish SMA alignment. Confirm the actual session opening range manually.'};
+ } else if(!candidate&&bearish5&&bias!=='BULLISH'&&c.close<lo&&p.close>=lo){
+   candidate={side:'SHORT',family:'ORB / breakout continuation',entry:c.close,stop:Math.max(p.high,lo+a*.15),reason:'Closed 5m candle breaks below the recent 15m range with bearish SMA alignment. Confirm the actual session opening range manually.'};
+ }
+ if(!candidate)return {status:'NO TRADE',bias,sma50,reason:`No qualifying pullback or breakout. 1H bias ${bias}; 5m SMA filter ${c.close>sma50?'bullish side':c.close<sma50?'bearish side':'at SMA'}. Wait for a new closed-candle setup.`};
+ let dist=Math.abs(candidate.entry-candidate.stop);
+ if(!Number.isFinite(dist)||dist<=0||dist>a*3)return {status:'REJECTED',bias,sma50,reason:'Candidate rejected: stop distance is invalid or too wide relative to current 5m ATR.'};
+ const cfgv=cfg(), equityBuf=equity-cfgv.floor, dailyBuf=equity-cfgv.daily;
+ if(equity<=cfgv.floor||equityBuf<=cfgv.risk||dailyBuf<=cfgv.risk)return {status:'LOCKED',bias,sma50,reason:'Risk governor locked: equity is at/below a threshold or buffer is too small for the configured risk.'};
+ const feeRate=cfgv.fee*2, slipRate=cfgv.slip;
+ // Conservative sizing estimate: stop risk plus round-trip fees on entry notional and slippage allowance.
+ const costPerEth=(candidate.entry*feeRate)+(candidate.entry*slipRate);
+ const qty=cfgv.risk/(dist+costPerEth);
+ const stop=candidate.stop, tp1=candidate.entry+(candidate.side==='LONG'?1:-1)*dist, tp2=candidate.entry+(candidate.side==='LONG'?2.5:-2.5)*dist;
+ const grossRisk=qty*dist, costs=qty*costPerEth, allin=grossRisk+costs;
+ const room=Math.abs(tp2-candidate.entry), rr=(qty*room-costs)/allin;
+ if(allin>cfgv.risk*1.001)return {status:'REJECTED',bias,sma50,reason:'Risk calculation exceeds configured cap after estimated costs.'};
+ if(rr<1.5)return {status:'REJECTED',bias,sma50,reason:'Estimated net reward-to-risk is below the 1.5R minimum.'};
+ return {...candidate,status:'CONDITIONAL',bias,sma50,dist,qty,allin,tp1,tp2,rr,atr:a,reason:candidate.reason+' This is a mechanical candidate, not a validated statistical edge.'};
+}
+function render(){
+ $('connection').textContent=lastPrice?'LIVE DATA':'OFFLINE';$('connection').style.color=lastPrice?'var(--green)':'var(--red)';
+ $('price').textContent=lastPrice?fmt(lastPrice):'—';$('updated').textContent='Updated '+new Date().toLocaleTimeString();
+ const b=trend(candles[60].slice(0,-1));$('trend1h').textContent=b;$('trend1h').style.color=b==='BULLISH'?'var(--green)':b==='BEARISH'?'var(--red)':'var(--muted)';
+ const m=candles[15].slice(0,-1);$('structure15').textContent=m.length>10?(m[m.length-1].close>Math.max(...m.slice(-10,-1).map(x=>x.high))?'BREAKOUT UP':m[m.length-1].close<Math.min(...m.slice(-10,-1).map(x=>x.low))?'BREAKDOWN':'RANGE / PULLBACK'):'—';
+ const f=candles[5].slice(0,-1), sm=sma(f,50), cl=f[f.length-1]?.close;$('trigger5').textContent=sm&&cl?(cl>sm?'ABOVE 50 SMA':cl<sm?'BELOW 50 SMA':'AT SMA'):'Need more candles';
+ currentSetup=detectSetup();
+ $('verdict').textContent=currentSetup.status==='CONDITIONAL'?currentSetup.side:currentSetup.status;
+ $('setupName').textContent=currentSetup.family||'No qualifying setup';
+ $('reasons').textContent=currentSetup.reason||'Awaiting market data';
+ $('scoreBadge').textContent=currentSetup.status==='CONDITIONAL'?'RULES PASS':currentSetup.status;
+ $('scoreBadge').className='status '+(currentSetup.status==='CONDITIONAL'?'good':currentSetup.status==='NO TRADE'?'wait':'bad');
+ $('paperBtn').disabled=currentSetup.status!=='CONDITIONAL'||!!position;
+ $('planFamily').textContent=currentSetup.family||'—';$('planSide').textContent=currentSetup.side||'—';$('planEntry').textContent=currentSetup.entry?fmt(currentSetup.entry):'—';$('planStop').textContent=currentSetup.stop?fmt(currentSetup.stop):'—';$('planTp1').textContent=currentSetup.tp1?fmt(currentSetup.tp1):'—';$('planTp2').textContent=currentSetup.tp2?fmt(currentSetup.tp2):'—';$('planQty').textContent=currentSetup.qty?currentSetup.qty.toFixed(4)+' ETH':'—';$('planRisk').textContent=currentSetup.allin?fmt(currentSetup.allin):'—';$('planRR').textContent=currentSetup.rr?currentSetup.rr.toFixed(2)+'R':'—';
+ if(currentSetup.status==='CONDITIONAL')$('planDisclaimer').textContent='Conditional only. Validate the actual session opening range, structure, price, fees, and all dashboard limits before any manual decision.';
+ updatePaperUI();
+}
+async function refresh(){
+ if(busy)return;busy=true;$('refreshBtn').disabled=true;
+ try{
+   const [a,b,c]=await Promise.all([fetchCandles(5),fetchCandles(15),fetchCandles(60)]);
+   candles[5]=a;candles[15]=b;candles[60]=c;lastPrice=a[a.length-1]?.close||null;
+   $('connection').textContent='LIVE DATA';$('connection').style.color='var(--green)';
+   updatePaperPosition();render();
+ }catch(e){$('connection').textContent='DATA ERROR';$('connection').style.color='var(--red)';$('reasons').textContent='Market data error: '+e.message+'. Tap Refresh data. If it persists, Kraken API access may be blocked by this browser/network.';}
+ finally{busy=false;$('refreshBtn').disabled=false;}
+}
+function updatePaperPosition(){
+ if(!position||!lastPrice)return;
+ const side=position.side==='LONG'?1:-1;
+ // Paper stop/target detection uses current price crossing; actual intrabar order is unknown.
+ const candle=candles[5][candles[5].length-1]; if(!candle)return;
+ let exit=null,why='';
+ if(position.side==='LONG'){
+  if(candle.low<=position.stop){exit=position.stop;why='STOP';}
+  else if(!position.tp1Hit&&candle.high>=position.tp1){position.tp1Hit=true;const q=position.qty*.5;const pnl=(position.tp1-position.entry)*q;realized+=pnl-estimatedFees(position.tp1,q);position.remainingQty-=q;position.partialNet+=pnl-estimatedFees(position.tp1,q);position.stop=position.entry;position.notes='TP1 simulated; remaining stop moved to entry (fee-adjustment simplified).';}
+  if(!exit&&position.tp1Hit&&candle.high>=position.tp2){exit=position.tp2;why='TP2';}
+ }else{
+  if(candle.high>=position.stop){exit=position.stop;why='STOP';}
+  else if(!position.tp1Hit&&candle.low<=position.tp1){position.tp1Hit=true;const q=position.qty*.5;const pnl=(position.entry-position.tp1)*q;realized+=pnl-estimatedFees(position.tp1,q);position.remainingQty-=q;position.partialNet+=pnl-estimatedFees(position.tp1,q);position.stop=position.entry;position.notes='TP1 simulated; remaining stop moved to entry (fee-adjustment simplified).';}
+  if(!exit&&position.tp1Hit&&candle.low<=position.tp2){exit=position.tp2;why='TP2';}
+ }
+ if(exit!==null)closePosition(exit,why);
+ saveState();
+}
+function estimatedFees(price,qty){return Math.abs(price*qty)*cfg().fee*2;}
+function openPaper(){
+ const s=currentSetup;if(!s||s.status!=='CONDITIONAL'||position)return;
+ const c=cfg();if(equity<=c.floor||equity<=c.daily){alert('Risk governor locked. Check thresholds.');return;}
+ const qty=s.qty,fee=estimatedFees(s.entry,qty);
+ position={side:s.side,family:s.family,entry:s.entry,stop:s.stop,initialStop:s.stop,tp1:s.tp1,tp2:s.tp2,qty,remainingQty:qty,tp1Hit:false,openedAt:new Date().toISOString(),partialNet:0,notes:'Simulated entry; fill quality is approximate.'};
+ realized-=fee; saveState();render();
+}
+function closePosition(price,reason){
+ if(!position)return;const p=position,qty=p.remainingQty;const gross=(price-p.entry)*qty*(p.side==='LONG'?1:-1);const fees=estimatedFees(price,qty);const net=gross-fees;
+ realized+=net;const total=realized;history.unshift({time:new Date().toLocaleString(),side:p.side,family:p.family,entry:p.entry,exit:price,net:p.partialNet+net,reason});
+ if(history.length>100)history=history.slice(0,100);
+ position=null;equity=+(+($('startingEquity').value||5000)+realized).toFixed(2);saveState();updatePaperUI();
+}
+function updatePaperUI(){
+ const open=position&&lastPrice?((lastPrice-position.entry)*position.remainingQty*(position.side==='LONG'?1:-1)-estimatedFees(lastPrice,position.remainingQty)):0;
+ $('paperEquity').textContent=fmt((+$('startingEquity').value||5000)+realized+open);
+ $('realized').textContent=fmt(realized);$('realized').className=realized>=0?'positive':'negative';$('openPnl').textContent=fmt(open);$('openPnl').className=open>=0?'positive':'negative';
+ $('tradeCount').textContent=history.length+(position?1:0);const wins=history.filter(t=>t.net>0).length;$('winRate').textContent=history.length?(100*wins/history.length).toFixed(0)+'%':'—';
+ $('positionState').textContent=position?(position.side+' OPEN'):'FLAT';$('positionState').className='status '+(position?'good':'wait');
+ $('closeBtn').disabled=!position;
+ $('openPosition').textContent=position?`${position.side} · ${position.family} · Entry ${fmt(position.entry)} · Remaining ${position.remainingQty.toFixed(4)} ETH · Stop ${fmt(position.stop)} · TP1 ${position.tp1Hit?'FILLED':fmt(position.tp1)} · TP2 ${fmt(position.tp2)} · ${position.notes}`:'No simulated position open.';
+ $('ledger').innerHTML=history.length?history.map((t,i)=>`<tr><td>${i+1}<br><span class="sub">${escapeHtml(t.time)}</span></td><td>${escapeHtml(t.side)}<br>${escapeHtml(t.family)}</td><td>${fmt(t.entry)} → ${fmt(t.exit)}</td><td class="${t.net>=0?'positive':'negative'}">${fmt(t.net)}</td><td>${escapeHtml(t.reason)}</td></tr>`).join(''):'<tr><td colspan="5" class="sub">No closed paper trades yet.</td></tr>';
+}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+$('paperBtn').addEventListener('click',openPaper);$('refreshBtn').addEventListener('click',refresh);
+$('closeBtn').addEventListener('click',()=>{if(position&&lastPrice)closePosition(lastPrice,'MANUAL PAPER CLOSE');render();});
+$('resetBtn').addEventListener('click',()=>{if(confirm('Reset simulated equity, position, and all paper history? This cannot be undone.')){equity=+$('startingEquity').value||5000;realized=0;history=[];position=null;saveState();render();}});
+['startingEquity','risk','floor','dailyFloor','fee','slippage'].forEach(id=>$(id).addEventListener('change',()=>{if(id==='startingEquity'&&history.length===0&&!position){equity=+$('startingEquity').value||5000;}saveState();render();}));
+loadState();render();refresh();setInterval(refresh,30000);
+})();
+</script>
+</body>
+</html>
