@@ -20,8 +20,11 @@ from notifications import (
     startup_alert,
     trade_alert,
     exit_alert,
-    lockout_alert
+    lockout_alert,
+    command_listener
 )
+
+VERSION = "ETH EDGE COMMANDER V2.1"
 
 PAIR = "ETHUSD"
 SCAN_INTERVAL = 5
@@ -39,7 +42,7 @@ storage = Storage()
 restored = storage.restore(engine)
 
 STATE = {
-    "system": "ETH EDGE COMMANDER V2",
+    "system": VERSION,
     "mode": "PAPER",
     "status": "STARTING",
     "market_source": "Kraken Spot",
@@ -51,7 +54,13 @@ STATE = {
     "scans": 0,
     "updated": None,
     "error": None,
-    "restored_account": restored
+    "restored_account": restored,
+    "overall_floor": OVERALL_FLOOR,
+    "daily_threshold": DAILY_THRESHOLD,
+    "account": None,
+    "analysis": None,
+    "approval": None,
+    "history": []
 }
 
 
@@ -60,16 +69,23 @@ def publish(**values):
         STATE.update(copy.deepcopy(values))
 
 
+def get_state():
+    with LOCK:
+        return copy.deepcopy(STATE)
+
+
 def kraken_request(endpoint, params):
     url = (
         "https://api.kraken.com/0/public/"
-        + endpoint + "?" + params
+        + endpoint
+        + "?"
+        + params
     )
 
     request = urllib.request.Request(
         url,
         headers={
-            "User-Agent": "ETH-Edge-Commander/2.0"
+            "User-Agent": "ETH-Edge-Commander/2.1"
         }
     )
 
@@ -86,7 +102,8 @@ def kraken_request(endpoint, params):
 
 def get_price():
     result = kraken_request(
-        "Ticker", "pair=" + PAIR
+        "Ticker",
+        "pair=" + PAIR
     )
 
     ticker = next(iter(result.values()))
@@ -118,6 +135,7 @@ def notify(function, *args):
 def persist(events=None):
     try:
         storage.save(engine, events)
+
     except Exception:
         engine.trading_locked = True
         engine.lock_reason = "Database failure"
@@ -164,6 +182,7 @@ def scan_market():
                     startup_alert,
                     engine.equity(price)
                 )
+
                 announced = True
 
             for event in exits:
@@ -187,23 +206,27 @@ def scan_market():
             if engine.trading_locked:
                 verdict = "NO TRADE"
                 reason = engine.lock_reason
+                approval = None
 
             elif engine.position:
                 verdict = "HOLD"
-                reason = "Managing open position"
+                reason = "Managing open paper position"
 
             elif (
                 time.monotonic() - last_analysis
                 >= ANALYSIS_INTERVAL
             ):
                 last_analysis = time.monotonic()
+                approval = None
 
                 h1 = get_candles(60)
                 m15 = get_candles(15)
                 m5 = get_candles(5)
 
                 analysis = analyze_market(
-                    h1, m15, m5
+                    h1,
+                    m15,
+                    m5
                 )
 
                 verdict = analysis["verdict"]
@@ -217,8 +240,7 @@ def scan_market():
                     ]
 
                     signal_id = (
-                        f"{PAIR}-"
-                        f"{signal_time}"
+                        f"{PAIR}-{signal_time}"
                     )
 
                     age = (
@@ -288,10 +310,12 @@ def scan_market():
                                 )
 
                                 if opened:
-                                    persist([{
-                                        "type": "ENTRY",
-                                        "data": approval
-                                    }])
+                                    persist([
+                                        {
+                                            "type": "ENTRY",
+                                            "data": approval
+                                        }
+                                    ])
 
                                     notify(
                                         trade_alert,
@@ -302,7 +326,38 @@ def scan_market():
                                     verdict = "NO TRADE"
                                     reason = "Entry rejected"
 
-            stats = engine.statistics(price)
+            elif verdict == "HOLD" or verdict in (
+                "LONG", "SHORT"
+            ):
+                verdict = "WAIT"
+                reason = "Waiting for next market analysis"
+                approval = None
+
+            stats = dict(engine.statistics(price))
+
+            stats["trading_locked"] = (
+                engine.trading_locked
+            )
+
+            stats["lock_reason"] = (
+                engine.lock_reason
+            )
+
+            if "open_position" not in stats:
+                position = engine.position
+
+                if not position:
+                    stats["open_position"] = None
+
+                elif isinstance(position, dict):
+                    stats["open_position"] = (
+                        copy.deepcopy(position)
+                    )
+
+                else:
+                    stats["open_position"] = (
+                        "Position active"
+                    )
 
             publish(
                 status="ONLINE",
@@ -331,10 +386,28 @@ def scan_market():
             )
 
         except Exception as error:
+            verdict = "NO TRADE"
+            reason = "Engine or data error"
+            approval = None
+
+            previous = get_state()
+            account = previous.get("account")
+
+            if isinstance(account, dict):
+                account["trading_locked"] = (
+                    engine.trading_locked
+                )
+
+                account["lock_reason"] = (
+                    engine.lock_reason
+                )
+
             publish(
                 status="ERROR",
-                verdict="NO TRADE",
-                reason="Engine or data error",
+                verdict=verdict,
+                reason=reason,
+                approval=None,
+                account=account,
                 error=str(error)
             )
 
@@ -351,24 +424,40 @@ def scan_market():
 class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
-        if self.path not in (
-            "/", "/status", "/health"
+        path = self.path.split("?")[0]
+
+        if path not in (
+            "/",
+            "/status",
+            "/health"
         ):
             self.send_error(404)
             return
 
-        with LOCK:
-            snapshot = copy.deepcopy(STATE)
+        snapshot = get_state()
 
-        if self.path == "/health":
+        if path == "/health":
             snapshot = {
-                "status": snapshot["status"]
+                "status": snapshot["status"],
+                "system": VERSION,
+                "mode": "PAPER",
+                "scans": snapshot["scans"],
+                "updated": snapshot["updated"],
+                "real_execution": False
             }
 
-        payload = json.dumps(
-            snapshot,
-            allow_nan=False
-        ).encode("utf-8")
+        try:
+            payload = json.dumps(
+                snapshot,
+                allow_nan=False
+            ).encode("utf-8")
+
+        except (ValueError, TypeError):
+            self.send_error(
+                500,
+                "State serialization error"
+            )
+            return
 
         self.send_response(200)
 
@@ -393,23 +482,49 @@ class Handler(BaseHTTPRequestHandler):
         )
 
         self.end_headers()
+
         self.wfile.write(payload)
 
 
 if __name__ == "__main__":
     scanner = threading.Thread(
         target=scan_market,
+        name="MarketScanner",
         daemon=True
     )
 
     scanner.start()
+
+    telegram = threading.Thread(
+        target=command_listener,
+        args=(get_state,),
+        name="TelegramCommandCenter",
+        daemon=True
+    )
+
+    telegram.start()
 
     port = int(
         os.environ.get("PORT", 10000)
     )
 
     print(
-        f"Commander listening on {port}",
+        f"{VERSION} listening on {port}",
+        flush=True
+    )
+
+    print(
+        "Market scanner started",
+        flush=True
+    )
+
+    print(
+        "Paper trading enabled",
+        flush=True
+    )
+
+    print(
+        "Real execution disabled",
         flush=True
     )
 
